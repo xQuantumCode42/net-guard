@@ -1,0 +1,13 @@
+/target/
+/release/
+/node_modules/
+**/node_modules/
+**/dist/
+**/gen/schemas/
+/.superpowers/
+/.local/
+*.db
+*.db-shm
+*.db-wal
+*.log
+.DS_Store

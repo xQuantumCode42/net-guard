@@ -1,0 +1,16 @@
+[package]
+name = "netguard-platform"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+netguard-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ipnet = "2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_NetworkManagement_WindowsFilteringPlatform", "Win32_NetworkManagement_IpHelper", "Win32_Networking_WinSock", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Threading", "Win32_System_Rpc", "Win32_System_Memory"] }
+

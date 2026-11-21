@@ -1,0 +1,18 @@
+import { chromium } from '@playwright/test';
+import { mkdir } from 'node:fs/promises';
+const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1 });
+const errors = [];
+page.on('pageerror', e => errors.push(String(e)));
+await page.goto('http://127.0.0.1:1420');
+await page.getByText('防護服務未連線', { exact: true }).waitFor();
+await mkdir('../../.local', { recursive: true });
+await page.screenshot({ path: '../../.local/overview.png', fullPage: true });
+await page.getByRole('button', { name: '規則管理', exact: true }).click();
+await page.getByRole('button', { name: '新增規則', exact: true }).click();
+await page.getByLabel('規則名稱', { exact: true }).fill('測試目的地');
+await page.getByLabel('目的地', { exact: true }).fill('192.0.2.1');
+await page.screenshot({ path: '../../.local/rule-editor.png', fullPage: true });
+if (errors.length) throw new Error(errors.join('\n'));
+console.log('Preview and rule editor rendered; no browser errors.');
+await browser.close();
