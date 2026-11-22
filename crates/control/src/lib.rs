@@ -7,6 +7,7 @@ pub const MAX_MESSAGE: usize = 8 * 1024 * 1024;
 #[serde(tag = "command", rename_all = "snake_case")]
 pub enum Request {
     Status,
+    GetPolicy,
     Apply { policy: Policy },
     Pause,
     Resume,
@@ -38,6 +39,8 @@ impl Status {
 pub struct Response {
     pub status: Status,
     pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy: Option<Policy>,
 }
 pub fn read_message<T: serde::de::DeserializeOwned>(reader: &mut impl Read) -> Result<T, String> {
     let mut prefix = [0u8; 4];

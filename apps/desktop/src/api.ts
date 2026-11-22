@@ -1,7 +1,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { Policy, Snapshot, Status } from './types';
 export async function snapshot(): Promise<Snapshot> {
-  if (!isTauri()) return { status: { connected: false, active: false, platform: 'preview', version: '1.0.0', report: { applied: 0, unsupported: [] }, capabilities: [], error: '瀏覽器預覽不具備原生攔截能力，請啟動桌面應用程式。' }, policy: { rules: [], exclusions: [] }, flows: [], events: [], observation_error: null, data_dir: '' };
+  if (!isTauri()) return { status: { connected: false, active: false, platform: 'preview', version: '1.1.0', report: { applied: 0, unsupported: [] }, capabilities: [], error: '瀏覽器預覽不具備原生攔截能力，請啟動桌面應用程式。' }, policy: { rules: [], exclusions: [] }, flows: [], events: [], observation_error: null, data_dir: '' };
   return invoke('get_snapshot');
 }
 export async function savePolicy(policy: Policy): Promise<Status> { return invoke('save_policy', { policy }); }

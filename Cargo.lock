@@ -2149,18 +2149,19 @@ dependencies = [
 
 [[package]]
 name = "netguard-agent"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "ctrlc",
  "netguard-control",
  "netguard-core",
  "netguard-platform",
+ "serde",
  "serde_json",
 ]
 
 [[package]]
 name = "netguard-control"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "libc",
  "netguard-core",
@@ -2172,7 +2173,7 @@ dependencies = [
 
 [[package]]
 name = "netguard-core"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "idna",
  "ipnet",
@@ -2185,7 +2186,7 @@ dependencies = [
 
 [[package]]
 name = "netguard-desktop"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "netguard-control",
  "netguard-core",
@@ -2201,7 +2202,7 @@ dependencies = [
 
 [[package]]
 name = "netguard-platform"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "ipnet",
  "netguard-core",

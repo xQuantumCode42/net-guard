@@ -28,10 +28,22 @@ async fn blocking<T: Send + 'static>(
         .await
         .map_err(|e| e.to_string())?
 }
+#[cfg(not(target_os = "linux"))]
 fn service_status() -> Status {
     netguard_control::request(&Request::Status)
         .map(|r| r.status)
         .unwrap_or_else(Status::offline)
+}
+fn load_policy(store: &Store) -> Result<Policy, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let _ = store;
+        netguard_control::request(&Request::GetPolicy)?
+            .policy
+            .ok_or("背景服務未提供規則，請確認服務版本".into())
+    }
+    #[cfg(not(target_os = "linux"))]
+    store.load_policy()
 }
 fn save(path: PathBuf, policy: Policy) -> Result<Status, String> {
     policy.validate()?;
@@ -46,8 +58,13 @@ fn save(path: PathBuf, policy: Policy) -> Result<Status, String> {
             response.status
         }
         Err(error) => {
-            store.save_policy(&policy)?;
-            Status::offline(format!("已儲存本機規則，服務啟動前不會生效。{error}"))
+            #[cfg(target_os = "linux")]
+            return Err(error);
+            #[cfg(not(target_os = "linux"))]
+            {
+                store.save_policy(&policy)?;
+                Status::offline(format!("已儲存本機規則，服務啟動前不會生效。{error}"))
+            }
         }
     };
     // Agent and UI share the same selected DB. Only the agent writes when connected.
@@ -67,8 +84,16 @@ async fn get_snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
     let path = state.path.clone();
     blocking(move || {
         let store = Store::open(&path)?;
-        let policy = store.load_policy()?;
-        let status = service_status();
+        #[cfg(target_os = "linux")]
+        let (status, policy) = match netguard_control::request(&Request::GetPolicy) {
+            Ok(response) => (
+                response.status,
+                response.policy.ok_or("背景服務未提供規則")?,
+            ),
+            Err(error) => (Status::offline(error), Policy::default()),
+        };
+        #[cfg(not(target_os = "linux"))]
+        let (status, policy) = (service_status(), load_policy(&store)?);
         let (flows, observation_error) = match netguard_platform::observe() {
             Ok(f) => (f, None),
             Err(e) => (vec![], Some(e)),
@@ -126,7 +151,7 @@ fn merge_feed(path: PathBuf, text: String) -> Result<Status, String> {
     for rule in &mut rules {
         rule.expires_at = Some(now() + 48 * 3600);
     }
-    let mut policy = Store::open(&path)?.load_policy()?;
+    let mut policy = load_policy(&Store::open(&path)?)?;
     policy
         .rules
         .retain(|r| r.source.as_deref() != Some("spamhaus_drop"));
@@ -146,7 +171,7 @@ async fn update_feed(state: State<'_, AppState>) -> Result<Status, String> {
         let client = reqwest::blocking::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .redirect(reqwest::redirect::Policy::none())
-            .user_agent("NetGuard/1.0.0")
+            .user_agent(concat!("NetGuard/", env!("CARGO_PKG_VERSION")))
             .build()
             .map_err(|e| e.to_string())?;
         let mut text = String::new();
@@ -178,7 +203,15 @@ async fn update_feed(state: State<'_, AppState>) -> Result<Status, String> {
 #[tauri::command]
 async fn export_policy(state: State<'_, AppState>) -> Result<String, String> {
     let path = state.path.clone();
-    blocking(move || Store::open(&path)?.export()).await
+    blocking(move || {
+        let policy = load_policy(&Store::open(&path)?)?;
+        serde_json::to_string_pretty(&netguard_core::store::Export {
+            schema_version: 1,
+            policy,
+        })
+        .map_err(|e| e.to_string())
+    })
+    .await
 }
 #[tauri::command]
 async fn clear_events(state: State<'_, AppState>) -> Result<(), String> {
@@ -208,7 +241,9 @@ fn start_protection(path: PathBuf) -> Result<Status, String> {
     if let Ok(response) = netguard_control::request(&Request::Status) {
         return enable_protection(response.status);
     }
+    #[cfg(windows)]
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    #[cfg(windows)]
     let agent = exe
         .parent()
         .ok_or("找不到執行檔目錄")?
@@ -217,6 +252,7 @@ fn start_protection(path: PathBuf) -> Result<Status, String> {
         } else {
             "netguard-agent"
         });
+    #[cfg(windows)]
     if !agent.is_file() {
         return Err(
             "找不到 netguard-agent；請將服務執行檔放在桌面程式旁，或依 README 手動啟動".into(),
@@ -272,12 +308,18 @@ fn start_protection(path: PathBuf) -> Result<Status, String> {
     }
     #[cfg(target_os = "linux")]
     {
-        let mut child = std::process::Command::new("pkexec")
-            .arg(agent)
-            .args(["--database", &path.display().to_string(), "--owner", &owner])
-            .spawn()
-            .map_err(|e| e.to_string())?;
-        wait_for_protection(|| child.try_wait().ok().flatten().map(|exit| exit.to_string()))
+        let _ = path;
+        let unit = format!("netguard@{owner}.service");
+        let exit = std::process::Command::new("/usr/bin/pkexec")
+            .args(["/usr/bin/systemctl", "start", &unit])
+            .status()
+            .map_err(|e| format!("無法開啟系統授權：{e}"))?;
+        if !exit.success() {
+            return Err(format!(
+                "無法啟動 {unit}（{exit}）。可用 journalctl -u {unit} 查看原因。"
+            ));
+        }
+        wait_for_protection(|| None)
     }
     #[cfg(target_os = "macos")]
     {
@@ -338,7 +380,7 @@ fn main() {
             let menu = Menu::with_items(app, &[&show, &quit])?;
             let mut tray = TrayIconBuilder::new()
                 .menu(&menu)
-                .tooltip("NetGuard 1.0.0")
+                .tooltip(concat!("NetGuard ", env!("CARGO_PKG_VERSION")))
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
                         if let Some(w) = app.get_webview_window("main") {

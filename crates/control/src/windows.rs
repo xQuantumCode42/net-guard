@@ -270,6 +270,7 @@ mod tests {
                 Response {
                     status,
                     error: None,
+                    policy: None,
                 }
             };
             let result =

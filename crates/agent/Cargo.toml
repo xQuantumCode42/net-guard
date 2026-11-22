@@ -9,4 +9,5 @@ netguard-core.workspace = true
 netguard-platform.workspace = true
 netguard-control.workspace = true
 serde_json.workspace = true
-ctrlc = "3"
+serde.workspace = true
+ctrlc = { version = "3", features = ["termination"] }

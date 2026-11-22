@@ -52,7 +52,7 @@ impl Backend {
                 engine,
                 ids: vec![],
             };
-            let mut name = wide("NetGuard 1.0.0");
+            let mut name = wide(concat!("NetGuard ", env!("CARGO_PKG_VERSION")));
             let layer = FWPM_SUBLAYER0 {
                 subLayerKey: SUBLAYER,
                 displayData: FWPM_DISPLAY_DATA0 {

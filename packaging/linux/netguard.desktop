@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=NetGuard
+Comment=Network protection and connection activity
+Exec=netguard-desktop
+Icon=netguard
+Type=Application
+Terminal=false
+Categories=System;Security;

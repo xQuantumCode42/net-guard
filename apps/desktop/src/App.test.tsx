@@ -5,7 +5,7 @@ import App from './App';
 import * as api from './api';
 import type { Snapshot } from './types';
 vi.mock('./api');
-const empty: Snapshot = { status: { connected: false, active: false, platform: 'windows', version: '1.0.0', report: { applied: 0, unsupported: [] }, capabilities: [], error: 'agent offline' }, policy: { rules: [], exclusions: [] }, flows: [], events: [], observation_error: null, data_dir: 'test' };
+const empty: Snapshot = { status: { connected: false, active: false, platform: 'windows', version: '1.1.0', report: { applied: 0, unsupported: [] }, capabilities: [], error: 'agent offline' }, policy: { rules: [], exclusions: [] }, flows: [], events: [], observation_error: null, data_dir: 'test' };
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(api.snapshot).mockResolvedValue(structuredClone(empty)); vi.mocked(api.autostartEnabled).mockResolvedValue(false); });
 test('disconnected agent never displays active protection', async () => {
   render(<App/>); expect(await screen.findByText('防護服務未連線')).toBeInTheDocument();

@@ -1,0 +1,16 @@
+[Unit]
+Description=NetGuard network protection for UID %i
+After=network.target
+
+[Service]
+Type=exec
+ExecStart=/usr/lib/netguard/netguard-agent --owner %i --database /var/lib/netguard-%i/state.db --enable
+StateDirectory=netguard-%i
+StateDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

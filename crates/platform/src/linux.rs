@@ -7,20 +7,27 @@ pub struct Backend {
     table: String,
 }
 fn run(script: &str) -> Result<(), String> {
-    let mut child = Command::new("/usr/sbin/nft")
+    let nft = ["/usr/sbin/nft", "/usr/bin/nft"]
+        .into_iter()
+        .find(|path| std::path::Path::new(path).is_file())
+        .ok_or("找不到 nft，請安裝 nftables")?;
+    let mut child = Command::new(nft)
         .args(["-f", "-"])
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| e.to_string())?;
-    child
-        .stdin
-        .take()
-        .ok_or("無法開啟 nft stdin")?
-        .write_all(script.as_bytes())
-        .map_err(|e| e.to_string())?;
-    let result = child.wait_with_output().map_err(|e| e.to_string())?;
+    let mut stdin = child.stdin.take().ok_or("無法開啟 nft stdin")?;
+    let result = std::thread::scope(|scope| {
+        let writer = scope.spawn(move || stdin.write_all(script.as_bytes()));
+        let output = child.wait_with_output().map_err(|e| e.to_string())?;
+        let written = writer.join().map_err(|_| "nft 輸入執行緒失敗")?;
+        if output.status.success() {
+            written.map_err(|e| e.to_string())?;
+        }
+        Ok::<_, String>(output)
+    })?;
     if result.status.success() {
         Ok(())
     } else {

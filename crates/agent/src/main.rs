@@ -42,10 +42,11 @@ impl Runtime {
     }
     fn handle(&mut self, request: Request) -> Response {
         let result = match request {
-            Request::Status => {
+            Request::Status | Request::GetPolicy => {
                 return Response {
                     status: self.status(),
                     error: None,
+                    policy: matches!(request, Request::GetPolicy).then(|| self.policy.clone()),
                 }
             }
             Request::Pause => {
@@ -106,11 +107,15 @@ impl Runtime {
         Response {
             status: self.status(),
             error: self.error.clone(),
+            policy: None,
         }
     }
 }
 fn run() -> Result<(), String> {
     let args: Vec<String> = std::env::args().collect();
+    if let Some(command) = args.get(1).filter(|value| !value.starts_with('-')) {
+        return cli(command, &args[2..]);
+    }
     if args.iter().any(|a| a == "--version") {
         println!("NetGuard {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
@@ -200,10 +205,73 @@ fn run() -> Result<(), String> {
             }
         }
     });
-    println!("NetGuard 1.0.0 agent; owner={owner}; Ctrl+C to stop");
+    println!(
+        "NetGuard {} agent; owner={owner}; Ctrl+C to stop",
+        env!("CARGO_PKG_VERSION")
+    );
     netguard_control::serve(&owner, move |request| {
         runtime.lock().unwrap().handle(request)
     })
+}
+
+fn cli(command: &str, arguments: &[String]) -> Result<(), String> {
+    use netguard_core::store::Export;
+    let request = match (command, arguments) {
+        ("help", []) => {
+            println!("netguard <status|enable|pause|observe|export|import FILE|version>");
+            return Ok(());
+        }
+        ("version", []) => {
+            println!("NetGuard {}", env!("CARGO_PKG_VERSION"));
+            return Ok(());
+        }
+        ("observe", []) => return print_json(&netguard_platform::observe()?),
+        ("status", []) => Request::Status,
+        ("enable", []) => Request::Resume,
+        ("pause", []) => Request::Pause,
+        ("export", []) => Request::GetPolicy,
+        ("import", [path]) => {
+            use std::io::Read;
+            let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+            let mut text = String::new();
+            file.take(netguard_control::MAX_MESSAGE as u64 + 1)
+                .read_to_string(&mut text)
+                .map_err(|e| e.to_string())?;
+            if text.len() > netguard_control::MAX_MESSAGE {
+                return Err("設定檔超過 8 MB".into());
+            }
+            let export: Export = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+            if export.schema_version != 1 {
+                return Err("不支援的設定格式版本".into());
+            }
+            Request::Apply {
+                policy: export.policy,
+            }
+        }
+        _ => return Err("用法：netguard help".into()),
+    };
+    let response = netguard_control::request(&request)?;
+    if let Some(error) = response.error {
+        return Err(error);
+    }
+    if let Some(policy) = response.policy {
+        return print_json(&Export {
+            schema_version: 1,
+            policy,
+        });
+    }
+    if command == "export" {
+        return Err("服務未傳回規則，請確認背景服務版本".into());
+    }
+    print_json(&response.status)
+}
+
+fn print_json(value: &impl serde::Serialize) -> Result<(), String> {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(value).map_err(|e| e.to_string())?
+    );
+    Ok(())
 }
 fn main() {
     if let Err(error) = run() {
